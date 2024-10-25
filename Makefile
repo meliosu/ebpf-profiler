@@ -17,6 +17,8 @@ profiler.skel.h: profiler.bpf.o
 profiler.bpf.o: profiler.bpf.c
 	$(CC_BPF) $(FLAGS_BPF) -c profiler.bpf.c
 
+victim: victim.c
+	$(CC) $(FLAGS) -o victim victim.c
 
 clean:
 	rm $(TARGET) profiler.bpf.o profiler.skel.h
