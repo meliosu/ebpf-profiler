@@ -14,6 +14,8 @@ typedef struct {
     char *exec;
     int nfuncs;
     char **funcs;
+    int nargs;
+    char **args;
 } args_t;
 
 static error_t parse_opts(int key, char *arg, struct argp_state *state) {
@@ -60,17 +62,30 @@ static error_t parse_opts(int key, char *arg, struct argp_state *state) {
         break;
     }
 
+    case ARGP_KEY_ARG: {
+        args->args =
+            (char **)realloc(args->args, (args->nargs + 1) * sizeof(char *));
+        args->args[args->nargs++] = arg;
+        break;
+    }
+
     case ARGP_KEY_END: {
-        if (args->pid == 0) {
-            argp_error(state, "--pid is required");
+        if (args->args != NULL) {
+            args->args = (char **)realloc(args->args,
+                                          (args->nargs + 1) * sizeof(char *));
+            args->args[args->nargs] = NULL;
         }
 
-        if (args->exec == NULL) {
-            argp_error(state, "--exec is required");
+        if (args->args != NULL && args->pid != 0) {
+            argp_usage(state);
+        }
+
+        if (args->args == NULL && args->pid == 0) {
+            argp_usage(state);
         }
 
         if (args->funcs == NULL) {
-            argp_error(state, "--functions is required");
+            argp_usage(state);
         }
 
         break;
@@ -100,6 +115,8 @@ static error_t parse_args(args_t *args, int argc, char **argv) {
     args->pid = 0;
     args->exec = NULL;
     args->funcs = NULL;
+    args->args = NULL;
+    args->nargs = 0;
 
     return argp_parse(&argp, argc, argv, 0, 0, args);
 }

@@ -1,3 +1,4 @@
+#include <linux/limits.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -34,13 +35,79 @@ static int event_callback(void *ctx, void *data, size_t data_sz) {
     return 0;
 }
 
+static char *path_to_exe(pid_t pid) {
+    int err;
+
+    char symlink_path[PATH_MAX];
+    char executable_path[PATH_MAX];
+
+    err = sprintf(symlink_path, "/proc/%d/exe", pid);
+    if (err < 0) {
+        return NULL;
+    }
+
+    err = readlink(symlink_path, executable_path, PATH_MAX);
+    if (err) {
+        return NULL;
+    }
+
+    return strdup(executable_path);
+}
+
 int main(int argc, char **argv) {
     int err;
     args_t args;
+    pid_t tracee_pid;
+    char *tracee_exe;
+    int pipefd[2];
 
     err = parse_args(&args, argc, argv);
     if (err) {
         return 1;
+    }
+
+    if (args.pid == 0) {
+        err = pipe(pipefd);
+        if (err) {
+            panic("error creating pipe: %s", strerror(errno));
+        }
+
+        pid_t pid = fork();
+        if (pid < 0) {
+            panic("error creating child process: %s", strerror(errno));
+        }
+
+        if (pid == 0) {
+            close(pipefd[1]);
+
+            char c;
+
+            err = read(pipefd[0], &c, 1);
+            if (err <= 0) {
+                exit(1);
+            }
+
+            close(pipefd[0]);
+
+            err = execv(args.args[0], args.args);
+            if (err) {
+                panic("error executing");
+            }
+        } else {
+            close(pipefd[0]);
+            tracee_pid = pid;
+        }
+    } else {
+        tracee_pid = args.pid;
+    }
+
+    if (args.pid == 0) {
+        tracee_exe = args.args[0];
+    } else {
+        tracee_exe = path_to_exe(args.pid);
+        if (!tracee_exe) {
+            panic("error getting path to tracee's executable file");
+        }
     }
 
     struct profiler_bpf *skel = profiler_bpf__open_and_load();
@@ -53,7 +120,7 @@ int main(int argc, char **argv) {
                     .retprobe = false, .bpf_cookie = i);
 
         struct bpf_link *link = bpf_program__attach_uprobe_opts(
-            skel->progs.uprobe, args.pid, args.exec, 0, &uprobe_opts);
+            skel->progs.uprobe, tracee_pid, tracee_exe, 0, &uprobe_opts);
 
         if (!link) {
             panic("error attaching uprobe: %s", strerror(errno));
@@ -65,7 +132,7 @@ int main(int argc, char **argv) {
                     .retprobe = true, .bpf_cookie = i);
 
         struct bpf_link *link = bpf_program__attach_uprobe_opts(
-            skel->progs.uretprobe, args.pid, args.exec, 0, &uretprobe_opts);
+            skel->progs.uretprobe, tracee_pid, tracee_exe, 0, &uretprobe_opts);
 
         if (!link) {
             panic("error attaching uretprobe: %s", strerror(errno));
@@ -77,6 +144,16 @@ int main(int argc, char **argv) {
 
     if (!rb) {
         panic("error creating ring buffer: %s", strerror(errno));
+    }
+
+    if (args.pid == 0) {
+        char c;
+        err = write(pipefd[1], &c, 1);
+        if (err < 0) {
+            panic("error writing to pipe");
+        }
+
+        close(pipefd[1]);
     }
 
     while (1) {
