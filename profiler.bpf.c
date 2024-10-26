@@ -74,7 +74,7 @@ int uretprobe(void *ctx) {
         return 0;
     }
 
-    int tid = bpf_get_current_pid_tgid() >> 32;
+    int tid = bpf_get_current_pid_tgid();
     unsigned long end = bpf_ktime_get_ns();
 
     event->cookie = cookie;
