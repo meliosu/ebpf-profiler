@@ -32,8 +32,9 @@ SEC("uprobe/...")
 int uprobe(void *ctx) {
     unsigned int cookie = bpf_get_attach_cookie(ctx);
     struct task_struct *task = (void *)bpf_get_current_task_btf();
-    entry_t *entries = bpf_task_storage_get(&event_ts, task, NULL,
-                                            BPF_LOCAL_STORAGE_GET_F_CREATE);
+    entry_t *entries = bpf_task_storage_get(
+        &event_ts, task, NULL, BPF_LOCAL_STORAGE_GET_F_CREATE
+    );
 
     if (!entries) {
         return 0;

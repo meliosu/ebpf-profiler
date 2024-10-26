@@ -116,11 +116,17 @@ int main(int argc, char **argv) {
     }
 
     for (int i = 0; i < args.nfuncs; i++) {
-        LIBBPF_OPTS(bpf_uprobe_opts, uprobe_opts, .func_name = args.funcs[i],
-                    .retprobe = false, .bpf_cookie = i);
+        LIBBPF_OPTS(
+            bpf_uprobe_opts,
+            uprobe_opts,
+            .func_name = args.funcs[i],
+            .retprobe = false,
+            .bpf_cookie = i
+        );
 
         struct bpf_link *link = bpf_program__attach_uprobe_opts(
-            skel->progs.uprobe, tracee_pid, tracee_exe, 0, &uprobe_opts);
+            skel->progs.uprobe, tracee_pid, tracee_exe, 0, &uprobe_opts
+        );
 
         if (!link) {
             panic("error attaching uprobe: %s", strerror(errno));
@@ -128,19 +134,26 @@ int main(int argc, char **argv) {
     }
 
     for (int i = 0; i < args.nfuncs; i++) {
-        LIBBPF_OPTS(bpf_uprobe_opts, uretprobe_opts, .func_name = args.funcs[i],
-                    .retprobe = true, .bpf_cookie = i);
+        LIBBPF_OPTS(
+            bpf_uprobe_opts,
+            uretprobe_opts,
+            .func_name = args.funcs[i],
+            .retprobe = true,
+            .bpf_cookie = i
+        );
 
         struct bpf_link *link = bpf_program__attach_uprobe_opts(
-            skel->progs.uretprobe, tracee_pid, tracee_exe, 0, &uretprobe_opts);
+            skel->progs.uretprobe, tracee_pid, tracee_exe, 0, &uretprobe_opts
+        );
 
         if (!link) {
             panic("error attaching uretprobe: %s", strerror(errno));
         }
     }
 
-    struct ring_buffer *rb = ring_buffer__new(bpf_map__fd(skel->maps.event_rb),
-                                              event_callback, &args, NULL);
+    struct ring_buffer *rb = ring_buffer__new(
+        bpf_map__fd(skel->maps.event_rb), event_callback, &args, NULL
+    );
 
     if (!rb) {
         panic("error creating ring buffer: %s", strerror(errno));
