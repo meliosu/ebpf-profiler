@@ -30,10 +30,7 @@ INLINE int submit_flags() {
 
 SEC("uprobe/...")
 int uprobe(void *ctx) {
-    unsigned int cookie = bpf_get_attach_cookie(ctx) >> 32;
-
-    bpf_printk("uprobe cookie: %d", cookie);
-
+    unsigned int cookie = bpf_get_attach_cookie(ctx);
     struct task_struct *task = (void *)bpf_get_current_task_btf();
     entry_t *entries = bpf_task_storage_get(&event_ts, task, NULL,
                                             BPF_LOCAL_STORAGE_GET_F_CREATE);
@@ -53,10 +50,7 @@ int uprobe(void *ctx) {
 
 SEC("uretprobe/...")
 int uretprobe(void *ctx) {
-    unsigned int cookie = bpf_get_attach_cookie(ctx) >> 32;
-
-    bpf_printk("uretprobe cookie: %d", cookie);
-
+    unsigned int cookie = bpf_get_attach_cookie(ctx);
     struct task_struct *task = (void *)bpf_get_current_task_btf();
     entry_t *entries = bpf_task_storage_get(&event_ts, task, NULL, 0);
 
