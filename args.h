@@ -8,6 +8,7 @@
 #define KEY_PID 'p'
 #define KEY_EXEC 'e'
 #define KEY_FUNCS 'f'
+#define KEY_OUTPUT 'o'
 
 typedef struct {
     int pid;
@@ -16,6 +17,7 @@ typedef struct {
     char **funcs;
     int nargs;
     char **args;
+    char *output;
 } args_t;
 
 static error_t parse_opts(int key, char *arg, struct argp_state *state) {
@@ -62,17 +64,24 @@ static error_t parse_opts(int key, char *arg, struct argp_state *state) {
         break;
     }
 
+    case KEY_OUTPUT: {
+        args->output = arg;
+        break;
+    }
+
     case ARGP_KEY_ARG: {
-        args->args =
-            (char **)realloc(args->args, (args->nargs + 1) * sizeof(char *));
+        args->args = (char **)realloc(
+            args->args, (args->nargs + 1) * sizeof(char *)
+        );
         args->args[args->nargs++] = arg;
         break;
     }
 
     case ARGP_KEY_END: {
         if (args->args != NULL) {
-            args->args = (char **)realloc(args->args,
-                                          (args->nargs + 1) * sizeof(char *));
+            args->args = (char **)realloc(
+                args->args, (args->nargs + 1) * sizeof(char *)
+            );
             args->args[args->nargs] = NULL;
         }
 
@@ -103,7 +112,9 @@ static error_t parse_args(args_t *args, int argc, char **argv) {
         {"pid", KEY_PID, "PID", 0, "pid of the process to trace"},
         {"exec", KEY_EXEC, "FILE", 0, "path to executable file of the process"},
         {"functions", KEY_FUNCS, "F1,F2,..", 0, "list of functions to trace"},
-        {0}};
+        {"output", KEY_OUTPUT, "FILE", 0, "output file"},
+        {0}
+    };
 
     struct argp argp = {
         opts,
@@ -117,6 +128,7 @@ static error_t parse_args(args_t *args, int argc, char **argv) {
     args->funcs = NULL;
     args->args = NULL;
     args->nargs = 0;
+    args->output = NULL;
 
     return argp_parse(&argp, argc, argv, 0, 0, args);
 }

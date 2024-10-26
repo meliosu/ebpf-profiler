@@ -1,3 +1,4 @@
+#include <fcntl.h>
 #include <linux/limits.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -30,6 +31,17 @@ static int event_callback(void *ctx, void *data, size_t data_sz) {
 
     for (int i = 0; i < data_sz / sizeof(event_t); i++) {
         event_report(&events[i], args->funcs);
+    }
+
+    return 0;
+}
+
+static int output_callback(void *ctx, void *data, size_t data_sz) {
+    int output = (int)(long)ctx;
+
+    int n = write(output, data, data_sz);
+    if (n < data_sz) {
+        panic("error writing to output file");
     }
 
     return 0;
@@ -151,8 +163,34 @@ int main(int argc, char **argv) {
         }
     }
 
+    ring_buffer_sample_fn callback;
+    void *context;
+
+    if (args.output) {
+        int output = open(args.output, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (output < 0) {
+            panic("error opening output file: %s", strerror(errno));
+        }
+
+        write(output, &tracee_pid, sizeof(tracee_pid));
+        write(output, &args.nfuncs, sizeof(args.nfuncs));
+
+        for (int i = 0; i < args.nfuncs; i++) {
+            int len = strlen(args.funcs[i]);
+
+            write(output, &len, sizeof(len));
+            write(output, args.funcs[i], len);
+        }
+
+        callback = output_callback;
+        context = (void *)(long)output;
+    } else {
+        callback = event_callback;
+        context = &args;
+    }
+
     struct ring_buffer *rb = ring_buffer__new(
-        bpf_map__fd(skel->maps.event_rb), event_callback, &args, NULL
+        bpf_map__fd(skel->maps.event_rb), callback, context, NULL
     );
 
     if (!rb) {
