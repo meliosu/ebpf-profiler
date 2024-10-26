@@ -10,7 +10,6 @@ typedef struct {
 
 typedef struct {
     unsigned long start;
-    unsigned long end;
 } entry_t;
 
 #endif /* PROFILER_COMMON_H */
