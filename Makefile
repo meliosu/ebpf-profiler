@@ -20,5 +20,8 @@ profiler.bpf.o: profiler.bpf.c
 victim: victim.c
 	$(CC) $(FLAGS) -o victim victim.c
 
+victim-mt: victim-mt.c
+	$(CC) $(FLAGS) -o victim-mt victim-mt.c
+
 clean:
 	rm $(TARGET) profiler.bpf.o profiler.skel.h
