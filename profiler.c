@@ -81,9 +81,6 @@ int main(int argc, char **argv) {
 
     while (1) {
         ring_buffer__poll(rb, 100);
-        /*if (err) {*/
-        /*    panic("error polling ring buffer: %s", strerror(errno));*/
-        /*}*/
     }
 
     ring_buffer__free(rb);
