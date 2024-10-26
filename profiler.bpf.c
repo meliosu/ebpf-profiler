@@ -50,6 +50,7 @@ int uprobe(void *ctx) {
 
 SEC("uretprobe/...")
 int uretprobe(void *ctx) {
+    unsigned long end = bpf_ktime_get_ns();
     unsigned int cookie = bpf_get_attach_cookie(ctx);
     struct task_struct *task = (void *)bpf_get_current_task_btf();
     entry_t *entries = bpf_task_storage_get(&event_ts, task, NULL, 0);
@@ -75,7 +76,6 @@ int uretprobe(void *ctx) {
     }
 
     int tid = bpf_get_current_pid_tgid();
-    unsigned long end = bpf_ktime_get_ns();
 
     event->cookie = cookie;
     event->tid = tid;
