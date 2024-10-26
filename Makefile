@@ -23,5 +23,9 @@ victim: victim.c
 victim-mt: victim-mt.c
 	$(CC) $(FLAGS) -o victim-mt victim-mt.c
 
+install: $(TARGET)
+	cp $(TARGET) /usr/local/bin
+	
+
 clean:
 	rm $(TARGET) profiler.bpf.o profiler.skel.h
