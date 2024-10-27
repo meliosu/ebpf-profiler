@@ -19,7 +19,7 @@ $(TARGET).bpf.o: $(TARGET).bpf.c
 	$(CC_BPF) $(FLAGS_BPF) -c $<
 
 install:
-	cp $(TARGET) $(INSTALL_DIR)
+	cp -f $(TARGET) $(INSTALL_DIR)
 
 
 clean:
