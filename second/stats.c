@@ -218,7 +218,9 @@ static void print_summary(args_t *args, struct bpf_map *samples) {
             panic("error looking up element in a map: %s", strerror(errno));
         }
 
-        report(args, &next_key, &value);
+        if (value.count) {
+            report(args, &next_key, &value);
+        }
 
         key = next_key;
     }
