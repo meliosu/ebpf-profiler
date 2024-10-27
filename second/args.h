@@ -8,7 +8,12 @@
 #define KEY_FUNCTIONS 'f'
 
 typedef struct {
-    char **funcs;
+    char *object;
+    char *symbol;
+} func_t;
+
+typedef struct {
+    func_t *funcs;
     int nfuncs;
     char **args;
     int nargs;
@@ -27,13 +32,24 @@ static error_t parse_opts(int key, char *arg, struct argp_state *state) {
             }
         }
 
-        char **funcs = (char **)malloc(nfuncs * sizeof(char *));
+        func_t *funcs = (func_t *)malloc(nfuncs * sizeof(func_t));
 
         int i = 0;
         char *tok = strtok(arg, ",");
 
         while (tok) {
-            funcs[i++] = tok;
+            char *symbol = strdup(tok);
+            char *object = strsep(&symbol, ":");
+
+            if (symbol) {
+                funcs[i].symbol = symbol;
+                funcs[i].object = object;
+            } else {
+                funcs[i].object = NULL;
+                funcs[i].symbol = object;
+            }
+
+            i++;
             tok = strtok(NULL, ",");
         }
 

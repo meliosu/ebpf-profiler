@@ -49,7 +49,7 @@ static char *which(char *name) {
 }
 
 static char *resolve(char *name) {
-    for (char *c = name; c != 0; c++) {
+    for (char *c = name; *c != 0; c++) {
         if (*c == '/') {
             return name;
         }
@@ -62,7 +62,7 @@ static void report(args_t *args, sample_key_t *key, sample_value_t *value) {
     printf(
         "%-8d %-16s %-8llu %-8.1f %-8.1f %-8.1f\n",
         key->tid,
-        args->funcs[key->cookie],
+        args->funcs[key->cookie].symbol,
         value->count,
         (float)value->min / 1000.0,
         (float)value->max / 1000.0,
@@ -117,16 +117,20 @@ int main(int argc, char **argv) {
     struct bpf_link *link;
 
     for (int i = 0; i < args.nfuncs; i++) {
+        func_t *func = &args.funcs[i];
+        char *symbol = func->symbol;
+        char *object = func->object ?: exe;
+
         LIBBPF_OPTS(
             bpf_uprobe_opts,
             opts,
             .bpf_cookie = i,
             .retprobe = false,
-            .func_name = args.funcs[i]
+            .func_name = symbol,
         );
 
         link = bpf_program__attach_uprobe_opts(
-            skel->progs.at_entry, pid, exe, 0, &opts
+            skel->progs.at_entry, pid, object, 0, &opts
         );
 
         if (!link) {
@@ -135,20 +139,24 @@ int main(int argc, char **argv) {
     }
 
     for (int i = 0; i < args.nfuncs; i++) {
+        func_t *func = &args.funcs[i];
+        char *symbol = func->symbol;
+        char *object = func->object ?: exe;
+
         LIBBPF_OPTS(
             bpf_uprobe_opts,
             opts,
             .bpf_cookie = i,
             .retprobe = true,
-            .func_name = args.funcs[i]
+            .func_name = symbol
         );
 
         link = bpf_program__attach_uprobe_opts(
-            skel->progs.at_exit, pid, exe, 0, &opts
+            skel->progs.at_exit, pid, object, 0, &opts
         );
 
         if (!link) {
-            panic("error attaching uretprobe: %s", strerror(errno));
+            panic("error attaching uprobe: %s", strerror(errno));
         }
     }
 
