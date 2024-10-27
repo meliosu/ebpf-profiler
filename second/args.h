@@ -2,6 +2,7 @@
 #define STATS_ARGS_H
 
 #include <argp.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -72,7 +73,17 @@ static error_t parse_opts(int key, char *arg, struct argp_state *state) {
             argp_usage(state);
         }
 
-        if (args->args) {
+        if (!args->args) {
+            for (int i = 0; i < args->nfuncs; i++) {
+                if (!args->funcs[i].object) {
+                    argp_error(
+                        state,
+                        "must provide full path to functions (library:symbol) "
+                        "if tracing system"
+                    );
+                }
+            }
+        } else {
             args->args = (char **)realloc(
                 args->args, (args->nargs + 1) * sizeof(char *)
             );

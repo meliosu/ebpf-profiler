@@ -1,7 +1,6 @@
 #include <fcntl.h>
-#include <signal.h>
+#include <stdbool.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -58,6 +57,54 @@ static char *resolve(char *name) {
     return which(name);
 }
 
+static struct bpf_link *attach_uprobe(
+    struct bpf_program *program,
+    pid_t pid,
+    char *object,
+    char *symbol,
+    int retprobe,
+    int cookie
+) {
+    LIBBPF_OPTS(
+        bpf_uprobe_opts,
+        opts,
+        .func_name = symbol,
+        .retprobe = retprobe,
+        .bpf_cookie = cookie
+    );
+
+    return bpf_program__attach_uprobe_opts(program, pid, object, 0, &opts);
+}
+
+static void
+attach_uprobes(args_t *args, struct stats_bpf *skel, pid_t pid, char *exe) {
+    struct bpf_link *link;
+
+    for (int i = 0; i < args->nfuncs; i++) {
+        char *symbol = args->funcs[i].symbol;
+        char *object = args->funcs[i].object ?: exe;
+
+        link = attach_uprobe(
+            skel->progs.at_entry, pid, object, symbol, false, i
+        );
+
+        if (!link) {
+            panic("error attaching uprobe: %s", strerror(errno));
+        }
+    }
+
+    for (int i = 0; i < args->nfuncs; i++) {
+        char *symbol = args->funcs[i].symbol;
+        char *object = args->funcs[i].object ?: exe;
+
+        link = attach_uprobe(skel->progs.at_exit, pid, object, symbol, true, i);
+
+        if (!link) {
+            panic("error attaching uprobe: %s", strerror(errno));
+        }
+    }
+}
+
 static void report(args_t *args, sample_key_t *key, sample_value_t *value) {
     printf(
         "%-8d %-16s %-8llu %-8.1f %-8.1f %-8.1f\n",
@@ -70,26 +117,16 @@ static void report(args_t *args, sample_key_t *key, sample_value_t *value) {
     );
 }
 
-int main(int argc, char **argv) {
+static void observe_child(struct stats_bpf *skel, args_t *args) {
+    pid_t pid;
     int err;
-    args_t args;
 
-    err = argparse(&args, argc, argv);
-    if (err) {
-        panic("error parsing args");
-    }
-
-    char *exe = resolve(args.args[0]);
+    char *exe = resolve(args->args[0]);
     if (!exe) {
         panic("error finding executable");
     }
 
-    struct stats_bpf *skel = stats_bpf__open_and_load();
-    if (!skel) {
-        panic("error opening/loading skeleton: %s", strerror(errno));
-    }
-
-    pid_t pid = fork();
+    pid = fork();
     if (pid < 0) {
         panic("error creating child: %s", strerror(errno));
     }
@@ -108,59 +145,13 @@ int main(int argc, char **argv) {
 
         sigprocmask(SIG_UNBLOCK, &set, NULL);
 
-        err = execvp(args.args[0], args.args);
+        err = execvp(args->args[0], args->args);
         if (err) {
             panic("error executing: %s", strerror(errno));
         }
     }
 
-    struct bpf_link *link;
-
-    for (int i = 0; i < args.nfuncs; i++) {
-        func_t *func = &args.funcs[i];
-        char *symbol = func->symbol;
-        char *object = func->object ?: exe;
-
-        LIBBPF_OPTS(
-            bpf_uprobe_opts,
-            opts,
-            .bpf_cookie = i,
-            .retprobe = false,
-            .func_name = symbol,
-        );
-
-        link = bpf_program__attach_uprobe_opts(
-            skel->progs.at_entry, pid, object, 0, &opts
-        );
-
-        if (!link) {
-            panic("error attaching uprobe: %s", strerror(errno));
-        }
-    }
-
-    for (int i = 0; i < args.nfuncs; i++) {
-        func_t *func = &args.funcs[i];
-        char *symbol = func->symbol;
-        char *object = func->object ?: exe;
-
-        LIBBPF_OPTS(
-            bpf_uprobe_opts,
-            opts,
-            .bpf_cookie = i,
-            .retprobe = true,
-            .func_name = symbol
-        );
-
-        link = bpf_program__attach_uprobe_opts(
-            skel->progs.at_exit, pid, object, 0, &opts
-        );
-
-        if (!link) {
-            panic("error attaching uprobe: %s", strerror(errno));
-        }
-    }
-
-    signal(SIGINT, sighandler);
+    attach_uprobes(args, skel, pid, exe);
 
     err = kill(pid, SIGUSR1);
     if (err) {
@@ -183,6 +174,18 @@ int main(int argc, char **argv) {
             break;
         }
     }
+}
+
+static void observe_system(struct stats_bpf *skel, args_t *args) {
+    attach_uprobes(args, skel, -1, NULL);
+
+    while (!should_exit) {
+        pause();
+    }
+}
+
+static void print_summary(args_t *args, struct bpf_map *samples) {
+    int err;
 
     printf(
         "\n%-8s %-16s %-8s %-8s %-8s %-8s\n",
@@ -197,13 +200,13 @@ int main(int argc, char **argv) {
     sample_key_t key = {0};
     sample_key_t next_key;
 
-    while (!bpf_map__get_next_key(
-        skel->maps.samples, &key, &next_key, sizeof(sample_key_t)
-    )) {
+    while (
+        !bpf_map__get_next_key(samples, &key, &next_key, sizeof(sample_key_t))
+    ) {
         sample_value_t value;
 
         err = bpf_map__lookup_elem(
-            skel->maps.samples,
+            samples,
             &next_key,
             sizeof(sample_key_t),
             &value,
@@ -215,10 +218,35 @@ int main(int argc, char **argv) {
             panic("error looking up element in a map: %s", strerror(errno));
         }
 
-        report(&args, &next_key, &value);
+        report(args, &next_key, &value);
 
         key = next_key;
     }
+}
+
+int main(int argc, char **argv) {
+    int err;
+    args_t args;
+
+    err = argparse(&args, argc, argv);
+    if (err) {
+        panic("error parsing args");
+    }
+
+    struct stats_bpf *skel = stats_bpf__open_and_load();
+    if (!skel) {
+        panic("error opening/loading skeleton: %s", strerror(errno));
+    }
+
+    signal(SIGINT, sighandler);
+
+    if (args.args) {
+        observe_child(skel, &args);
+    } else {
+        observe_system(skel, &args);
+    }
+
+    print_summary(&args, skel->maps.samples);
 
     stats_bpf__destroy(skel);
 }
