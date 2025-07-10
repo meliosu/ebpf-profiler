@@ -59,7 +59,7 @@ static char *path_to_exe(pid_t pid) {
     }
 
     err = readlink(symlink_path, executable_path, PATH_MAX);
-    if (err) {
+    if (err < 0) {
         return NULL;
     }
 
